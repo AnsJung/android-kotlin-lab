@@ -30,6 +30,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.edit
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.datastroerealex.ui.SettingsKeys
 import com.example.datastroerealex.ui.dataStore
 import com.example.datastroerealex.ui.theme.DataStroeRealExTheme
@@ -37,6 +40,18 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val vm: SettingsViewModel by lazy {
+        val store = SettingsStore(applicationContext)
+        ViewModelProvider(
+            this,
+            object : ViewModelProvider.Factory {
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    @Suppress("UNCHECKED_CAST")
+                    return SettingsViewModel(store) as T
+                }
+            }
+        )[SettingsViewModel::class.java]
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -44,7 +59,8 @@ class MainActivity : ComponentActivity() {
             DataStroeRealExTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     SettingsScreen(
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier.padding(innerPadding),
+                        vm = vm
                     )
                 }
             }
@@ -53,21 +69,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun SettingsScreen(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val darkMode by context.dataStore.data
-        .map { prefs ->
-            prefs[SettingsKeys.DARK_MODE] ?: false
-        }
-        .collectAsState(initial = false)
-    val nickname by context.dataStore.data
-        .map { prefs ->
-            prefs[SettingsKeys.NICKNAME] ?: ""
-        }
-        .collectAsState(initial = "")
-    val scope = rememberCoroutineScope()
+fun SettingsScreen(modifier: Modifier = Modifier, vm: SettingsViewModel) {
+    val state by vm.uiState.collectAsStateWithLifecycle()
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -80,37 +85,21 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         ) {
             Text("Dark Mode")
             Switch(
-                checked = darkMode,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        context.dataStore.edit { prefs ->
-                            prefs[SettingsKeys.DARK_MODE] = enabled
-                        }
-                    }
-                }
+                checked = state.darkMode,
+                onCheckedChange = vm::onDarkModeChanged
             )
         }
 
         OutlinedTextField(
-            value = nickname,
-            onValueChange = { text->
-                scope.launch {
-                    context.dataStore.edit { prefs ->
-                        prefs[SettingsKeys.NICKNAME] = text
-                    }
-                }
-            },
+            value = state.nickname,
+            onValueChange = vm::onNicknameChanged,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Nickname") },
             singleLine = true
         )
 
         Button(
-            onClick = {
-                scope.launch {
-                    context.dataStore.edit { it.clear() }
-                }
-            },
+            onClick = vm::onResetClicked,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Reset (DataStore)")
@@ -118,15 +107,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         HorizontalDivider()
 
         Text("Preview", style = MaterialTheme.typography.titleMedium)
-        Text("darkMode = $darkMode")
-        Text("nickname = $nickname")
-    }
-}
-
-@Preview
-@Composable
-fun PreviewSettingsScreen() {
-    DataStroeRealExTheme {
-        SettingsScreen()
+        Text("darkMode = ${state.darkMode}")
+        Text("nickname = ${state.nickname}")
     }
 }
